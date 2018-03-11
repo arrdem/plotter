@@ -1,5 +1,5 @@
 (defproject me.arrdem/plotter "_"
-  :description "FIXME"
+  :description "Tools for drawing graphs with gnuplot."
   :url "http://github.com/arrdem/plotter"
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
