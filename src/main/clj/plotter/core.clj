@@ -123,7 +123,7 @@
                 (mapcat (fn [o]
                           (if (= ::p/graph (:type o))
                             (:curves o)
-                            (as-curve o))))
+                            [(as-curve o)])))
                 (into []))})
 
 (s/fdef as-points
