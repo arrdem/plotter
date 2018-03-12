@@ -1,7 +1,7 @@
 # Plotter
 <a href="https://de.wikipedia.org/wiki/Plotter#/media/File:Hp_9862a.jpg"><img align="right" src="/etc/plotter.jpg" width=300/></href>
 
-[![Clojars Project](https://img.shields.io/clojars/v/me.arrdem/plotter.svg)](https://clojars.org/me.arrdem/plotter)
+[![Clojars Project](http://clojars.org/me.arrdem/plotter/latest-version.svg)](https://clojars.org/me.arrdem/plotter)
 
 > Use a picture. It's worth a thousand words.
 >
