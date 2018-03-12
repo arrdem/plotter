@@ -22,13 +22,13 @@ user> (def sin (->curve #(Math/sin %) :title "sin(x)"))
 user> (def cos (->curve #(Math/cos %) :title "cos(x)"))
 #'user/cos
 user> (render! (compose sin cos)
-		 :min 0
-		 :max (* 4 Math/PI)
-		 :step 0.1
-		 :y-min -2
-		 :y-max 2
-		 :size 500
-		 )
+         :min 0
+         :max (* 4 Math/PI)
+         :step 0.1
+         :y-min -2
+         :y-max 2
+         :size 500
+         )
 {:exit 0,
  :out "",
  :err "",
