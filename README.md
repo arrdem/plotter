@@ -14,7 +14,7 @@ Plotter is a simple toolkit which attempts to keep graphs in a composable data-f
 
 ## Demo
 
-```
+```clj
 user> (require '[plotter.core :refer :all])
 nil
 user> (def sin (->curve #(Math/sin %) :title "sin(x)"))
@@ -22,13 +22,13 @@ user> (def sin (->curve #(Math/sin %) :title "sin(x)"))
 user> (def cos (->curve #(Math/cos %) :title "cos(x)"))
 #'user/cos
 user> (render! (compose sin cos)
-         :min 0
-         :max 100
-         :step 0.1
-         :y-min -2
-         :y-max 2
-         :size 300
-         )
+		 :min 0
+		 :max (* 4 Math/PI)
+		 :step 0.1
+		 :y-min -2
+		 :y-max 2
+		 :size 500
+		 )
 {:exit 0,
  :out "",
  :err "",
@@ -39,10 +39,10 @@ set output \"/tmp/graph_251417161639590865.png\"
 plot [] [-2:2] \"/tmp/points_1074626684104989046.txt\" using 1:2 title \"sin(x)\", \"/tmp/points_717203087347687554.txt\" using 1:2 title \"cos(x)\"
 quit",
  :graph #object[java.net.URI "0x1c754b93" "file:/tmp/graph_251417161639590865.png"]}
-plotter.core> 
+user>
 ```
 
-![sin and cos](/etc/sin-cos.png)
+<center><img src="/etc/sin-cos.png" alt="sin, cos demo"/></center>
 
 ## API Overview
 
