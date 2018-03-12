@@ -2,31 +2,48 @@
   "Tools for plotting."
   {:authors ["Reid \"arrdem\" McKenzie <me@arrdem.com>"],
    :license "https://www.eclipse.org/legal/epl-v10.html"}
-  (:refer-clojure :exclude [compose])
   (:require [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [detritus :refer [none]]
             [detritus.multi :as m]
+            [gnuplot :as g]
             [plotter :as p])
   (:import [java.io File StringReader]))
+
+(s/fdef ->curve
+        :args (s/or :1 ifn?
+                    :& (s/cat :f ifn?
+                              :opts map?
+                              :kwargs (s/keys* :opt-un [::p/coordinates
+                                                        ::p/title])))
+        :ret ::p/curve)
 
 (defn ->curve
   "Function for constructing plottable curves from functions.
 
   `f` is a function of one argument, the polar `x`, producing a
   numeric value for the single polar `y` at that point. This does
-  require that `f` be a proper function which is single-valued."
+  require that `f` be a proper function which is single-valued.
+
+  Supported options:
+  - `:coordinates`, at present only `::p/polar` is supported
+  - `:title`, an optional string which will be used as this curve's label"
   ([f]
    (->curve f :coordinates ::p/polar))
-  ([f & {:keys [coordinates] :as kwargs}]
-   {:type ::p/curve
-    :fn   f
-    :name name
-    :coordinates coordinates}))
+  ([f & {:as kwargs}]
+   (merge kwargs {:type ::p/curve, :fn f})))
 
 ;; FIXME: error bars need a LOT of business logic
+#_(s/fdef ->curve+error
+        :args (s/or :1 ifn?
+                    :& (s/cat :f ifn?
+                              :opts map?
+                              :kwargs (s/keys* :opt-un [::p/coordinates])))
+        :ret ::p/curve)
+
 #_(defn ->curve+error
   "Function for constructing plottable curves with error bounds.
 
@@ -43,8 +60,15 @@
 (defonce ^{:private true} h
   (make-hierarchy))
 
+(s/fdef as-curve
+        :args any?
+        :ret ::p/curve)
+
 (defmulti as-curve
-  "Function for coercing objects to plottable curves."
+  "Function for coercing objects to plottable curves.
+
+  Supports functions which are assumed to be unary, representing a
+  polar plot. Does not transform objects which are already curves."
   #'m/type
   :hierarchy #'h)
 
@@ -53,6 +77,12 @@
 (defmethod as-curve clojure.lang.IFn [x]
   (log/warn "Assuming `f` is a single valued polar function!")
   (->curve x))
+
+(s/fdef ->graph
+        :args (s/or :0 (s/cat)
+                    :2+ (s/cat :opts map?
+                               :curves (s/+ ::p/curve)))
+        :ret ::p/graph)
 
 (defn ->graph
   ([]
@@ -74,27 +104,43 @@
   ([prefix suffix directory]
    (File/createTempFile prefix suffix directory)))
 
+(s/fdef compose
+        :args (s/* (s/or :graph ::p/graph
+                         :curve ::p/curve
+                         :ifn   ifn?))
+        :ret ::p/graph)
+
 (defn compose
-  "Graphs may be composed together to produce a ... composite image with
-  all the same graphs."
+  "Function for \"composing\" together a zero or more \"plottables\" -
+  being either graphs, curves or objects which can be coerced to a
+  curve via `#'as-curve`.
+
+  Returns a graph containing all the plottables."
 
   [& graphs-or-curvables]
   {:type ::p/graph
-   :curves (mapcat (fn [o]
-                     (if (= ::p/graph (:type o))
-                       (:curves o)
-                       (as-curve o)))
-                   graphs-or-curvables)})
+   :curves (->> graphs-or-curvables
+                (mapcat (fn [o]
+                          (if (= ::p/graph (:type o))
+                            (:curves o)
+                            (as-curve o))))
+                (into []))})
+
+(s/fdef as-points
+        :args (s/cat :curve ::p/any-curve
+                     :range seq?)
+        :ret (s/keys :path string?
+                     :using (s/map-of symbol? pos-int?)))
 
 (defmulti as-points
-  "Function for converting curves to plottable points.
+  "Function for converting a curve and an interval to plottable points.
 
   Returns a file of points, paired with a descriptor explaining the
   format of the file."
-  {:argllists '([curve range])}
+  {:arglists '([curve range])}
   (fn [c r] (m/type c)))
 
-(defmethod as-points ::p/curve [{:keys [fn]} range]
+(defmethod as-points ::p/curve [{:keys [fn] :as c} range]
   (let [in-f (tmp "points_" ".txt")]
     ;; Populate a tempfile with points
     (with-open [w (io/writer in-f)]
@@ -102,8 +148,10 @@
         (doseq [i range]
           (printf "%s, %s\n" i (fn i)))))
     ;; Return a gnuplot plotting directive
-    {:path  (.getCanonicalPath in-f)
-     :using {'x 1 'y 2}}))
+    (merge c
+           {:type ::p/points
+            :path  (.getCanonicalPath in-f)
+            :using {'x 1 'y 2}})))
 
 ;; FIXME (arrdem 2018-03-10):
 ;;   This is hard because I don't know if either error function 1) exists 2) is symmetric
@@ -128,48 +176,91 @@
              (and δx δy))]}
   (str/join ":" (keep identity [x y δx δy])))
 
-(defn render!
-  "Given options and an `IFn`, map the `IFn` over the configured interval, producing a set of
-  points, and shelling out to GNUplot to render the points to a visualization."
+(defmacro ^:private line-template [& exprs]
+  `(->> [~@exprs]
+        (reduce (fn [acc# e#]
+                  (cond (nil? e#) acc#
+                        (seq? e#) (into acc# e#)
+                        :else     (conj acc# e#)))
+                [])
+        (str/join "\n")))
 
-  [{:keys [min max step
-           x-min x-max
-           y-min y-max
-           title autoscale
-           image-format size]
-    :or   {autoscale    true
-           image-format "png"}
-    :as   opts}
-   {:keys [curves] :as graph}]
-  (let [out-f    (tmp "graph_" (str "." image-format))
+(s/def ::out string?)
+(s/def ::err string?)
+(s/def ::exit integer?)
+(s/def ::script string?)
+(s/def ::graph uri?)
+
+(s/fdef render!
+        :args (s/cat :curve ::p/curve
+                     :opts (s/keys* :opt-un [::g/min ::g/max ::g/step
+                                             ::g/x-min ::g/x-max
+                                             ::g/y-min ::g/y-max
+                                             ::g/title
+                                             ::g/autoscale
+                                             ::g/image-format
+                                             ::g/size]))
+        :ret (s/keys :req-un [::out ::err ::exit ::script ::graph]))
+
+(defn render!
+  "Given a graph and optional keyword arguments, render the curves
+  constituting the graph to points and plot the points via gnuplot.
+
+  Supported options:
+  - `:autoscale` (true by default) tells gnuplot to size the graph
+  - `:size` either a single integer denoting a square image, or a pair
+     denoting the rectangular dimensions of the image.
+  - `:{x,y}-{min,max}` specify limits on the dimensions of the graph
+  - `:title` sets the graph's title
+  - `:image-format` (png default )tells gnuplot what kind of image to produce."
+
+  [graph & {:as kwargs}]
+  (let [{:keys [curves] :as graph}   graph
+        {:keys [min max step
+                x-min x-max
+                y-min y-max
+                title
+                autoscale
+                image-format size]
+         :or   {autoscale    true
+                image-format "png"}} kwargs
+
+        out-f    (tmp "graph_" (str "." image-format))
         interval (range min max step)
         plots    (map #(as-points % interval) curves)
         ranges   (str/join " "
                            [(format-range x-min x-max)
                             (format-range y-min y-max)])
-        in       (str/join "\n"
-                           `["#!/usr/bin/env gnuplot"
-                             ~@(when autoscale
-                                 ["set autoscale"])
-                             ~(if image-format
-                                (format "set terminal \"%s\"%s"
-                                        image-format
-                                        (when size (str " size " (str/join ", " size))))
-                                "set terminal png")
-                             ~(format "set output \"%s\"" (.getCanonicalPath out-f))
-                             ~@(when title
-                                 [(format "set title \"%s\"" title)])
-                             ~(str (format "plot %s " ranges)
-                                   (str/join ", "
-                                             (map (fn [{:keys [path using] :as plot}]
-                                                    (format "\"%s\" using %s"
-                                                            path (format-using using)))
-                                                  plots)))
-                             "quit"])]
+        in       (line-template
+                  "#!/usr/bin/env gnuplot"
+                  (when autoscale "set autoscale")
+                  (format "set terminal \"%s\"%s"
+                          image-format
+                          (when size
+                            (cond (and (vector? size)
+                                       (= 2 (count size))
+                                       (every? pos-int? size))
+                                  (str " size " (str/join ", " size))
+
+                                  (pos-int? size)
+                                  (format " size %s, %s" size size))))
+                  (format "set output \"%s\"" (.getCanonicalPath out-f))
+                  (when title
+                    (format "set title \"%s\"" title))
+                  (str (format "plot %s " ranges)
+                       (str/join ", "
+                                 (map (fn [{:keys [path using title] :as plot}]
+                                        (format "\"%s\" using %s%s"
+                                                path (format-using using)
+                                                (when title
+                                                  (format " title \"%s\"" title))))
+                                      plots)))
+                  "quit")]
 
     ;; Use gnuplot to actually draw the data file
     (merge
      (sh/sh "gnuplot"
             :in (StringReader. in))
-     {:script in
-      :graph (.toURI out-f)})))
+     {:type ::p/render
+      :script in
+      :graph  (.toURI out-f)})))

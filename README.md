@@ -7,11 +7,88 @@
 >
 > -- "Speakers Give Sound Advice". Syracuse Post Standard. page 18. March 28, 1911.
 
-**TL;DR** A grab bag of tools for producing and composing graphs.
+Graphs are a great way to summarize lots of data for rapid consumption by humans.
+Unfortunately, graphs aren't quite data, in that they're most useful when they are lossy representations.
 
-## Documentation
+Plotter is a simple toolkit which attempts to keep graphs in a composable data-first representation for as long as possible, enabling them to be listed for simultaneous display in a graph and ultimately rendered to a graphic.
 
-None yet. Sorry.
+## Demo
+
+```
+user> (require '[plotter.core :refer :all])
+nil
+user> (def sin (->curve #(Math/sin %) :title "sin(x)"))
+#'user/sin
+user> (def cos (->curve #(Math/cos %) :title "cos(x)"))
+#'user/cos
+user> (render! (compose sin cos)
+         :min 0
+         :max 100
+         :step 0.1
+         :y-min -2
+         :y-max 2
+         :size 300
+         )
+{:exit 0,
+ :out "",
+ :err "",
+ :script "#!/usr/bin/env gnuplot
+set autoscale
+set terminal \"png\" size 3000, 3000
+set output \"/tmp/graph_251417161639590865.png\"
+plot [] [-2:2] \"/tmp/points_1074626684104989046.txt\" using 1:2 title \"sin(x)\", \"/tmp/points_717203087347687554.txt\" using 1:2 title \"cos(x)\"
+quit",
+ :graph #object[java.net.URI "0x1c754b93" "file:/tmp/graph_251417161639590865.png"]}
+plotter.core> 
+```
+
+![sin and cos](/etc/sin-cos.png)
+
+## API Overview
+
+### [plotter.core/->curve](/src/main/clj/plotter/core.clj#L24)
+ - `(->curve f)`
+ - `(->curve f & {:as kwargs})`
+
+Function for constructing plottable curves from functions.
+
+`f` is a function of one argument, the polar `x`, producing a
+numeric value for the single polar `y` at that point. This does
+require that `f` be a proper function which is single-valued.
+
+Supported options:
+- `:coordinates`, at present only `::p/polar` is supported
+- `:title`, an optional string which will be used as this curve's label
+
+### [plotter.core/compose](/src/main/clj/plotter/core.clj#L113)
+ - `(compose & graphs-or-curvables)`
+
+Function for "composing" together a zero or more "plottables" -
+being either graphs, curves or objects which can be coerced to a
+curve via [`#'plotter.core/as-curve`](/README.md#plottercoreas-curve).
+
+Returns a graph containing all the plottables.
+
+### [plotter.core/as-curve](/src/main/clj/plotter/core.clj#L67)
+
+Function for coercing objects to plottable curves.
+
+Supports functions which are assumed to be unary, representing a
+polar plot. Does not transform objects which are already curves.
+
+### [plotter.core/render!](/src/main/clj/plotter/core.clj#L205)
+ - `(render! graph & {:as kwargs})`
+
+Given a graph and optional keyword arguments, render the curves
+constituting the graph to points and plot the points via gnuplot.
+
+Supported options:
+- `:autoscale` (true by default) tells gnuplot to size the graph
+- `:size` either a single integer denoting a square image, or a pair
+   denoting the rectangular dimensions of the image.
+- `:{x,y}-{min,max}` specify limits on the dimensions of the graph
+- `:title` sets the graph's title
+- `:image-format` (png default )tells gnuplot what kind of image to produce.
 
 ## License
 

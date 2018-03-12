@@ -25,3 +25,14 @@
    δx :- ifn?
    δy :- ifn? 
    coordinates :- ::coordinates])
+
+(s/def ::any-curve
+  (s/or :simple-curve ::curve
+        #_#_:error-curve ::curve+error
+        ))
+
+(s/def ::curves
+  (s/* ::any-curve))
+
+(deftag graph
+  [curves :- ::curves])
