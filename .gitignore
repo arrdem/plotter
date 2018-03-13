@@ -1,1 +1,11 @@
-.lein-env
+/**/*.class
+/**/*.jar
+/**/.lein-*
+/**/.nrepl-*
+/**/checkouts
+/**/classes
+/**/target
+/**/.#*
+/**/#*
+pom.xml
+pom.xml.asc
