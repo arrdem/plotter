@@ -236,14 +236,15 @@
                   (when autoscale "set autoscale")
                   (format "set terminal \"%s\"%s"
                           image-format
-                          (when size
+                          (if size
                             (cond (and (vector? size)
                                        (= 2 (count size))
                                        (every? pos-int? size))
                                   (str " size " (str/join ", " size))
 
                                   (pos-int? size)
-                                  (format " size %s, %s" size size))))
+                                  (format " size %s, %s" size size))
+                            ""))
                   (format "set output \"%s\"" (.getCanonicalPath out-f))
                   (when title
                     (format "set title \"%s\"" title))
