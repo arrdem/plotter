@@ -14,12 +14,12 @@
   (:import [java.io File StringReader]))
 
 (s/fdef ->curve
-        :args (s/or :1 ifn?
-                    :& (s/cat :f ifn?
-                              :opts map?
-                              :kwargs (s/keys* :opt-un [::p/coordinates
-                                                        ::p/title])))
-        :ret ::p/curve)
+  :args (s/or :1 ifn?
+              :& (s/cat :f ifn?
+                        :opts map?
+                        :kwargs (s/keys* :opt-un [::p/coordinates
+                                                  ::p/title])))
+  :ret ::p/curve)
 
 (defn ->curve
   "Function for constructing plottable curves from functions.
@@ -38,31 +38,31 @@
 
 ;; FIXME: error bars need a LOT of business logic
 #_(s/fdef ->curve+error
-        :args (s/or :1 ifn?
-                    :& (s/cat :f ifn?
-                              :opts map?
-                              :kwargs (s/keys* :opt-un [::p/coordinates])))
-        :ret ::p/curve)
+    :args (s/or :1 ifn?
+                :& (s/cat :f ifn?
+                          :opts map?
+                          :kwargs (s/keys* :opt-un [::p/coordinates])))
+    :ret ::p/curve)
 
 #_(defn ->curve+error
-  "Function for constructing plottable curves with error bounds.
+    "Function for constructing plottable curves with error bounds.
 
   `f` is a function of one argument, the polar `x`, to a numeric value
   being the polar `y` at that point. This does require that `f` be a
   proper function which is single-valued."
-  [f x-err-f y-err-f & {:keys [coordinates] :as kwargs}]
-  {:type ::p/curve+error
-   :fn f
-   :δx x-err-f
-   :δy y-err-f
-   :coordinates (or coordinates ::p/polar)})
+    [f x-err-f y-err-f & {:keys [coordinates] :as kwargs}]
+    {:type ::p/curve+error
+     :fn f
+     :δx x-err-f
+     :δy y-err-f
+     :coordinates (or coordinates ::p/polar)})
 
 (defonce ^{:private true} h
   (make-hierarchy))
 
 (s/fdef as-curve
-        :args any?
-        :ret ::p/curve)
+  :args any?
+  :ret ::p/curve)
 
 (defmulti as-curve
   "Function for coercing objects to plottable curves.
@@ -79,10 +79,10 @@
   (->curve x))
 
 (s/fdef ->graph
-        :args (s/or :0 (s/cat)
-                    :2+ (s/cat :opts map?
-                               :curves (s/+ ::p/curve)))
-        :ret ::p/graph)
+  :args (s/or :0 (s/cat)
+              :2+ (s/cat :opts map?
+                         :curves (s/+ ::p/curve)))
+  :ret ::p/graph)
 
 (defn ->graph
   ([]
@@ -93,6 +93,13 @@
    (merge options
           {:type ::graph
            :curves (mapv as-curve (cons c curves))})))
+
+(defn ->points
+  ([coll]
+   {:type ::p/points
+    :coll coll})
+  ([options coll]
+   (merge options (->points coll))))
 
 (defn- tmp
   "Creates and returns a new temporary `java.io.File`."
@@ -105,10 +112,10 @@
    (File/createTempFile prefix suffix directory)))
 
 (s/fdef compose
-        :args (s/* (s/or :graph ::p/graph
-                         :curve ::p/curve
-                         :ifn   ifn?))
-        :ret ::p/graph)
+  :args (s/* (s/or :graph ::p/graph
+                   :curve ::p/curve
+                   :ifn   ifn?))
+  :ret ::p/graph)
 
 (defn compose
   "Function for \"composing\" together a zero or more \"plottables\" -
@@ -127,12 +134,12 @@
                 (into []))})
 
 (s/fdef as-points
-        :args (s/cat :curve ::p/any-curve
-                     :range seq?)
-        :ret (s/keys :path string?
-                     :using (s/map-of symbol? pos-int?)))
+  :args (s/cat :curve ::p/any-curve
+               :range seq?)
+  :ret (s/keys :path string?
+               :using (s/map-of symbol? pos-int?)))
 
-(defmulti as-points
+(defmulti as-datafile
   "Function for converting a curve and an interval to plottable points.
 
   Returns a file of points, paired with a descriptor explaining the
@@ -140,7 +147,7 @@
   {:arglists '([curve range])}
   (fn [c r] (m/type c)))
 
-(defmethod as-points ::p/curve [{:keys [fn] :as c} range]
+(defmethod as-datafile ::p/curve [{:keys [fn] :as c} range]
   (let [in-f (tmp "points_" ".txt")]
     ;; Populate a tempfile with points
     (with-open [w (io/writer in-f)]
@@ -149,13 +156,27 @@
           (printf "%s, %s\n" i (fn i)))))
     ;; Return a gnuplot plotting directive
     (merge c
-           {:type ::p/points
+           {:type ::datafile
+            :path (.getCanonicalPath in-f)
+            :using {'x 1 'y 2}})))
+
+(defmethod as-datafile ::p/points [{:keys [coll] :as c} range]
+  ;; We ignore the range and let gnuplot sort it out
+  (let [in-f (tmp "points_" ".txt")]
+    ;; Populate a tempfile with points
+    (with-open [w (io/writer in-f)]
+      (binding [*out* w]
+        (doseq [[x y] coll]
+          (printf "%s, %s\n" x y))))
+    ;; Return a gnuplot plotting directive
+    (merge c
+           {:type ::datafile
             :path  (.getCanonicalPath in-f)
             :using {'x 1 'y 2}})))
 
 ;; FIXME (arrdem 2018-03-10):
 ;;   This is hard because I don't know if either error function 1) exists 2) is symmetric
-(defmethod as-points ::p/curve+error [{:keys [fn]}])
+(defmethod as-datafile ::p/curve+error [{:keys [fn]}])
 
 (defn- format-range [min max]
   (cond (and min max)
@@ -192,15 +213,15 @@
 (s/def ::graph uri?)
 
 (s/fdef render!
-        :args (s/cat :curve ::p/curve
-                     :opts (s/keys* :opt-un [::g/min ::g/max ::g/step
-                                             ::g/x-min ::g/x-max
-                                             ::g/y-min ::g/y-max
-                                             ::g/title
-                                             ::g/autoscale
-                                             ::g/image-format
-                                             ::g/size]))
-        :ret (s/keys :req-un [::out ::err ::exit ::script ::graph]))
+  :args (s/cat :curve ::p/curve
+               :opts (s/keys* :opt-un [::g/min ::g/max ::g/step
+                                       ::g/x-min ::g/x-max
+                                       ::g/y-min ::g/y-max
+                                       ::g/title
+                                       ::g/autoscale
+                                       ::g/image-format
+                                       ::g/size]))
+  :ret (s/keys :req-un [::out ::err ::exit ::script ::graph]))
 
 (defn render!
   "Given a graph and optional keyword arguments, render the curves
@@ -227,7 +248,7 @@
 
         out-f    (tmp "graph_" (str "." image-format))
         interval (range min max step)
-        plots    (map #(as-points % interval) curves)
+        plots    (map #(as-datafile % interval) curves)
         ranges   (str/join " "
                            [(format-range x-min x-max)
                             (format-range y-min y-max)])

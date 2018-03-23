@@ -26,9 +26,13 @@
    δy :- ifn? 
    coordinates :- ::coordinates])
 
+(deftag points
+  [coll :- seq?])
+
 (s/def ::any-curve
   (s/or :simple-curve ::curve
         #_#_:error-curve ::curve+error
+        :points ::points
         ))
 
 (s/def ::curves
