@@ -303,6 +303,6 @@
     (merge
      (sh/sh "gnuplot"
             :in (StringReader. in))
-     {:type ::p/render
+     {:type   ::p/render
       :script in
       :graph  (.toURI out-f)})))
