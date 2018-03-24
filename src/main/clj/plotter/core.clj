@@ -301,8 +301,7 @@
 
     ;; Use gnuplot to actually draw the data file
     (merge
-     (sh/sh "gnuplot"
-            :in (StringReader. in))
+     (sh/sh "gnuplot", :in (StringReader. in))
      {:type   ::p/render
       :script in
       :graph  (.toURI out-f)})))
