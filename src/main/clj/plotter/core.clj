@@ -43,7 +43,11 @@
 
 (defn ->points
   "Function for constructing plottable curves given data sets of points
-  as a collection of polar `[x y]` pairs with no error component."
+  as a collection of polar `[x y]` pairs with no error component.
+
+  Supported options:
+  - `:coordinates`, at present only `::p/polar` is supported
+  - `:title`, an optional string which will be used as this curve's label"
   ([coll]
    {:type ::p/points
     :coordinates ::p/polar
