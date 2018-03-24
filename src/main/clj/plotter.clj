@@ -16,20 +16,24 @@
 
 (deftag curve
   [name :- string?
-   f :- ifn? 
+   f :- ifn?
    coordinates :- ::coordinates])
 
 (deftag curve+error
-  [name :- string? 
-   f :- ifn? 
+  [name :- string?
+   f :- ifn?
    δx :- ifn?
-   δy :- ifn? 
+   δy :- ifn?
+   coordinates :- ::coordinates])
+
+(deftag points
+  [coll :- seq?
    coordinates :- ::coordinates])
 
 (s/def ::any-curve
   (s/or :simple-curve ::curve
         #_#_:error-curve ::curve+error
-        ))
+        :points ::points))
 
 (s/def ::curves
   (s/* ::any-curve))

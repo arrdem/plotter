@@ -16,7 +16,6 @@
 (s/fdef ->curve
         :args (s/or :1 ifn?
                     :& (s/cat :f ifn?
-                              :opts map?
                               :kwargs (s/keys* :opt-un [::p/coordinates
                                                         ::p/title])))
         :ret ::p/curve)
@@ -32,30 +31,46 @@
   - `:coordinates`, at present only `::p/polar` is supported
   - `:title`, an optional string which will be used as this curve's label"
   ([f]
-   (->curve f :coordinates ::p/polar))
+   {:type ::p/curve, :fn f, :coordinates ::p/polar})
   ([f & {:as kwargs}]
-   (merge kwargs {:type ::p/curve, :fn f})))
+   (merge (->curve f) kwargs)))
+
+(s/fdef ->points
+        :args (s/or :1 coll?
+                    :& (s/cat :coll coll?
+                              :kwargs (s/keys* :opt-un [::p/coordinates
+                                                        ::p/title]))))
+
+(defn ->points
+  "Function for constructing plottable curves given data sets of points
+  as a collection of polar `[x y]` pairs with no error component."
+  ([coll]
+   {:type ::p/points
+    :coordinates ::p/polar
+    :coll coll})
+  ([coll & {:as kwargs}]
+   (merge (->points coll) kwargs)))
 
 ;; FIXME: error bars need a LOT of business logic
 #_(s/fdef ->curve+error
-        :args (s/or :1 ifn?
-                    :& (s/cat :f ifn?
-                              :opts map?
-                              :kwargs (s/keys* :opt-un [::p/coordinates])))
-        :ret ::p/curve)
+          :args (s/or :1 ifn?
+                      :& (s/cat :f ifn?
+                                :opts map?
+                                :kwargs (s/keys* :opt-un [::p/coordinates])))
+          :ret ::p/curve)
 
 #_(defn ->curve+error
-  "Function for constructing plottable curves with error bounds.
+    "Function for constructing plottable curves with error bounds.
 
   `f` is a function of one argument, the polar `x`, to a numeric value
   being the polar `y` at that point. This does require that `f` be a
   proper function which is single-valued."
-  [f x-err-f y-err-f & {:keys [coordinates] :as kwargs}]
-  {:type ::p/curve+error
-   :fn f
-   :δx x-err-f
-   :δy y-err-f
-   :coordinates (or coordinates ::p/polar)})
+    [f x-err-f y-err-f & {:keys [coordinates] :as kwargs}]
+    {:type ::p/curve+error
+     :fn f
+     :δx x-err-f
+     :δy y-err-f
+     :coordinates (or coordinates ::p/polar)})
 
 (defonce ^{:private true} h
   (make-hierarchy))
@@ -73,6 +88,7 @@
   :hierarchy #'h)
 
 (defmethod as-curve ::p/curve [x] x)
+(defmethod as-curve ::p/points [x] x)
 (defmethod as-curve ::p/curve+error [x] x)
 (defmethod as-curve clojure.lang.IFn [x]
   (log/warn "Assuming `f` is a single valued polar function!")
@@ -115,9 +131,11 @@
   being either graphs, curves or objects which can be coerced to a
   curve via `#'as-curve`.
 
-  Returns a graph containing all the plottables."
+  Returns a graph containing all the plottables, which must all be in
+  the same coordinate system."
 
   [& graphs-or-curvables]
+  {:post [(= 1 (count (set (map :coordinates (:curves %)))))]}
   {:type ::p/graph
    :curves (->> graphs-or-curvables
                 (mapcat (fn [o]
@@ -132,7 +150,7 @@
         :ret (s/keys :path string?
                      :using (s/map-of symbol? pos-int?)))
 
-(defmulti as-points
+(defmulti as-datafile
   "Function for converting a curve and an interval to plottable points.
 
   Returns a file of points, paired with a descriptor explaining the
@@ -140,7 +158,7 @@
   {:arglists '([curve range])}
   (fn [c r] (m/type c)))
 
-(defmethod as-points ::p/curve [{:keys [fn] :as c} range]
+(defmethod as-datafile ::p/curve [{:keys [fn] :as c} range]
   (let [in-f (tmp "points_" ".txt")]
     ;; Populate a tempfile with points
     (with-open [w (io/writer in-f)]
@@ -149,13 +167,27 @@
           (printf "%s, %s\n" i (fn i)))))
     ;; Return a gnuplot plotting directive
     (merge c
-           {:type ::p/points
+           {:type ::datafile
+            :path (.getCanonicalPath in-f)
+            :using {'x 1 'y 2}})))
+
+(defmethod as-datafile ::p/points [{:keys [coll] :as c} range]
+  ;; We ignore the range and let gnuplot sort it out
+  (let [in-f (tmp "points_" ".txt")]
+    ;; Populate a tempfile with points
+    (with-open [w (io/writer in-f)]
+      (binding [*out* w]
+        (doseq [[x y] coll]
+          (printf "%s, %s\n" x y))))
+    ;; Return a gnuplot plotting directive
+    (merge c
+           {:type ::datafile
             :path  (.getCanonicalPath in-f)
             :using {'x 1 'y 2}})))
 
 ;; FIXME (arrdem 2018-03-10):
 ;;   This is hard because I don't know if either error function 1) exists 2) is symmetric
-(defmethod as-points ::p/curve+error [{:keys [fn]}])
+(defmethod as-datafile ::p/curve+error [{:keys [fn]}])
 
 (defn- format-range [min max]
   (cond (and min max)
@@ -227,7 +259,7 @@
 
         out-f    (tmp "graph_" (str "." image-format))
         interval (range min max step)
-        plots    (map #(as-points % interval) curves)
+        plots    (map #(as-datafile % interval) curves)
         ranges   (str/join " "
                            [(format-range x-min x-max)
                             (format-range y-min y-max)])
@@ -253,8 +285,7 @@
                                  (map (fn [{:keys [path using title] :as plot}]
                                         (format "\"%s\" using %s%s"
                                                 path (format-using using)
-                                                (when title
-                                                  (format " title \"%s\"" title))))
+                                                (format " title \"%s\"" (or title path))))
                                       plots)))
                   "quit")]
 
