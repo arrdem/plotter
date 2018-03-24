@@ -46,7 +46,7 @@ user>
 
 ## API Overview
 
-### [plotter.core/->curve](/src/main/clj/plotter/core.clj#L24)
+### [plotter.core/->curve](/src/main/clj/plotter/core.clj#L23)
  - `(->curve f)`
  - `(->curve f & {:as kwargs})`
 
@@ -60,23 +60,24 @@ Supported options:
 - `:coordinates`, at present only `::p/polar` is supported
 - `:title`, an optional string which will be used as this curve's label
 
-### [plotter.core/compose](/src/main/clj/plotter/core.clj#L113)
+### [plotter.core/compose](/src/main/clj/plotter/core.clj#L129)
  - `(compose & graphs-or-curvables)`
 
 Function for "composing" together a zero or more "plottables" -
 being either graphs, curves or objects which can be coerced to a
 curve via [`#'plotter.core/as-curve`](/README.md#plottercoreas-curve).
 
-Returns a graph containing all the plottables.
+Returns a graph containing all the plottables, which must all be in
+the same coordinate system.
 
-### [plotter.core/as-curve](/src/main/clj/plotter/core.clj#L67)
+### [plotter.core/as-curve](/src/main/clj/plotter/core.clj#L82)
 
 Function for coercing objects to plottable curves.
 
 Supports functions which are assumed to be unary, representing a
 polar plot. Does not transform objects which are already curves.
 
-### [plotter.core/render!](/src/main/clj/plotter/core.clj#L205)
+### [plotter.core/render!](/src/main/clj/plotter/core.clj#L237)
  - `(render! graph & {:as kwargs})`
 
 Given a graph and optional keyword arguments, render the curves
