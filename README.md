@@ -95,6 +95,9 @@ Given a graph and optional keyword arguments, render the curves
 constituting the graph to points and plot the points via gnuplot.
 
 Supported options:
+- `:min` the smallest (and first) x value to be plotted (default 0)
+- `:max` the largest x value to be plotted (default 100)
+- `:step` the interval on x at which to plot function points (default 0.1)
 - `:autoscale` (true by default) tells gnuplot to size the graph
 - `:size` either a single integer denoting a square image, or a pair
    denoting the rectangular dimensions of the image.
