@@ -14,12 +14,11 @@
   (:import [java.io File StringReader]))
 
 (s/fdef ->curve
-  :args (s/or :1 ifn?
-              :& (s/cat :f ifn?
-                        :opts map?
-                        :kwargs (s/keys* :opt-un [::p/coordinates
-                                                  ::p/title])))
-  :ret ::p/curve)
+        :args (s/or :1 ifn?
+                    :& (s/cat :f ifn?
+                              :kwargs (s/keys* :opt-un [::p/coordinates
+                                                        ::p/title])))
+        :ret ::p/curve)
 
 (defn ->curve
   "Function for constructing plottable curves from functions.
@@ -32,17 +31,33 @@
   - `:coordinates`, at present only `::p/polar` is supported
   - `:title`, an optional string which will be used as this curve's label"
   ([f]
-   (->curve f :coordinates ::p/polar))
+   {:type ::p/curve, :fn f, :coordinates ::p/polar})
   ([f & {:as kwargs}]
-   (merge kwargs {:type ::p/curve, :fn f})))
+   (merge (->curve f) kwargs)))
+
+(s/fdef ->points
+        :args (s/or :1 coll?
+                    :& (s/cat :coll coll?
+                              :kwargs (s/keys* :opt-un [::p/coordinates
+                                                        ::p/title]))))
+
+(defn ->points
+  "Function for constructing plottable curves given data sets of points
+  as a collection of polar `[x y]` pairs with no error component."
+  ([coll]
+   {:type ::p/points
+    :coordinates ::p/polar
+    :coll coll})
+  ([coll & {:as kwargs}]
+   (merge (->points coll) kwargs)))
 
 ;; FIXME: error bars need a LOT of business logic
 #_(s/fdef ->curve+error
-    :args (s/or :1 ifn?
-                :& (s/cat :f ifn?
-                          :opts map?
-                          :kwargs (s/keys* :opt-un [::p/coordinates])))
-    :ret ::p/curve)
+          :args (s/or :1 ifn?
+                      :& (s/cat :f ifn?
+                                :opts map?
+                                :kwargs (s/keys* :opt-un [::p/coordinates])))
+          :ret ::p/curve)
 
 #_(defn ->curve+error
     "Function for constructing plottable curves with error bounds.
@@ -61,8 +76,8 @@
   (make-hierarchy))
 
 (s/fdef as-curve
-  :args any?
-  :ret ::p/curve)
+        :args any?
+        :ret ::p/curve)
 
 (defmulti as-curve
   "Function for coercing objects to plottable curves.
@@ -73,16 +88,17 @@
   :hierarchy #'h)
 
 (defmethod as-curve ::p/curve [x] x)
+(defmethod as-curve ::p/points [x] x)
 (defmethod as-curve ::p/curve+error [x] x)
 (defmethod as-curve clojure.lang.IFn [x]
   (log/warn "Assuming `f` is a single valued polar function!")
   (->curve x))
 
 (s/fdef ->graph
-  :args (s/or :0 (s/cat)
-              :2+ (s/cat :opts map?
-                         :curves (s/+ ::p/curve)))
-  :ret ::p/graph)
+        :args (s/or :0 (s/cat)
+                    :2+ (s/cat :opts map?
+                               :curves (s/+ ::p/curve)))
+        :ret ::p/graph)
 
 (defn ->graph
   ([]
@@ -93,13 +109,6 @@
    (merge options
           {:type ::graph
            :curves (mapv as-curve (cons c curves))})))
-
-(defn ->points
-  ([coll]
-   {:type ::p/points
-    :coll coll})
-  ([options coll]
-   (merge options (->points coll))))
 
 (defn- tmp
   "Creates and returns a new temporary `java.io.File`."
@@ -112,19 +121,21 @@
    (File/createTempFile prefix suffix directory)))
 
 (s/fdef compose
-  :args (s/* (s/or :graph ::p/graph
-                   :curve ::p/curve
-                   :ifn   ifn?))
-  :ret ::p/graph)
+        :args (s/* (s/or :graph ::p/graph
+                         :curve ::p/curve
+                         :ifn   ifn?))
+        :ret ::p/graph)
 
 (defn compose
   "Function for \"composing\" together a zero or more \"plottables\" -
   being either graphs, curves or objects which can be coerced to a
   curve via `#'as-curve`.
 
-  Returns a graph containing all the plottables."
+  Returns a graph containing all the plottables, which must all be in
+  the same coordinate system."
 
   [& graphs-or-curvables]
+  {:post [(= 1 (count (set (map :coordinates (:curves %)))))]}
   {:type ::p/graph
    :curves (->> graphs-or-curvables
                 (mapcat (fn [o]
@@ -134,10 +145,10 @@
                 (into []))})
 
 (s/fdef as-points
-  :args (s/cat :curve ::p/any-curve
-               :range seq?)
-  :ret (s/keys :path string?
-               :using (s/map-of symbol? pos-int?)))
+        :args (s/cat :curve ::p/any-curve
+                     :range seq?)
+        :ret (s/keys :path string?
+                     :using (s/map-of symbol? pos-int?)))
 
 (defmulti as-datafile
   "Function for converting a curve and an interval to plottable points.
@@ -213,15 +224,15 @@
 (s/def ::graph uri?)
 
 (s/fdef render!
-  :args (s/cat :curve ::p/curve
-               :opts (s/keys* :opt-un [::g/min ::g/max ::g/step
-                                       ::g/x-min ::g/x-max
-                                       ::g/y-min ::g/y-max
-                                       ::g/title
-                                       ::g/autoscale
-                                       ::g/image-format
-                                       ::g/size]))
-  :ret (s/keys :req-un [::out ::err ::exit ::script ::graph]))
+        :args (s/cat :curve ::p/curve
+                     :opts (s/keys* :opt-un [::g/min ::g/max ::g/step
+                                             ::g/x-min ::g/x-max
+                                             ::g/y-min ::g/y-max
+                                             ::g/title
+                                             ::g/autoscale
+                                             ::g/image-format
+                                             ::g/size]))
+        :ret (s/keys :req-un [::out ::err ::exit ::script ::graph]))
 
 (defn render!
   "Given a graph and optional keyword arguments, render the curves
@@ -274,8 +285,7 @@
                                  (map (fn [{:keys [path using title] :as plot}]
                                         (format "\"%s\" using %s%s"
                                                 path (format-using using)
-                                                (when title
-                                                  (format " title \"%s\"" title))))
+                                                (format " title \"%s\"" (or title path))))
                                       plots)))
                   "quit")]
 
