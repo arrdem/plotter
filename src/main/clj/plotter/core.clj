@@ -101,6 +101,8 @@
   ([options coll]
    (merge options (->points coll))))
 
+(defmethod as-curve ::p/points [x] x)
+
 (defn- tmp
   "Creates and returns a new temporary `java.io.File`."
 
@@ -166,7 +168,7 @@
     ;; Populate a tempfile with points
     (with-open [w (io/writer in-f)]
       (binding [*out* w]
-        (doseq [[x y] coll]
+        (doseq [[x y] (map-indexed (fn [i e] [i e]) coll)]
           (printf "%s, %s\n" x y))))
     ;; Return a gnuplot plotting directive
     (merge c
