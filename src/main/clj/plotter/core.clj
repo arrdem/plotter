@@ -250,6 +250,7 @@
   - `:size` either a single integer denoting a square image, or a pair
      denoting the rectangular dimensions of the image.
   - `:{x,y}-{min,max}` specify limits on the dimensions of the graph
+  - `:{x,y}-label` specifies the label for the appropriate axis
   - `:title` sets the graph's title
   - `:image-format` (png default )tells gnuplot what kind of image to produce."
 
@@ -258,6 +259,7 @@
         {:keys [min max step
                 x-min x-max
                 y-min y-max
+                x-label y-label
                 title
                 autoscale
                 image-format size]
@@ -276,6 +278,10 @@
         in       (line-template
                   "#!/usr/bin/env gnuplot"
                   (when autoscale "set autoscale")
+                  (when x-label
+                    (format "set xlabel \"%s\"" x-label))
+                  (when y-label
+                    (format "set ylabel \"%s\"" y-label))
                   (format "set terminal \"%s\"%s"
                           image-format
                           (if size
